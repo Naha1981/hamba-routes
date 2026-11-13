@@ -1,4 +1,6 @@
 import express from 'express';
+import { planRoad } from './roadPlanner';
+import {mapsFetch} from './mapsService';
 import path from 'path';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
@@ -93,7 +95,7 @@ app.post('/api/routes/compute', async (req, res) => {
       if(!data){
         if(openRouteBusy || Date.now()-lastOpenRouteAt<1100) return res.status(429).json({error:'Please wait before the next open routing request.'});
         openRouteBusy=true;lastOpenRouteAt=Date.now();
-        try {const response=await fetch(`${base}/route/v1/driving/${points.map(p=>`${p.lng},${p.lat}`).join(';')}?steps=true&overview=full&geometries=geojson`,{signal:AbortSignal.timeout(20000),headers:{'User-Agent':'HambaRoutes-IsolatedTest/1.0 (https://github.com/Naha1981/hamba-routes)'}});if(!response.ok)throw new Error(`Routing service HTTP ${response.status}`);data=await response.json();if(data.code!=='Ok'||!data.routes?.[0])throw new Error('No drivable road route found.');openRouteCache.set(key,data);}finally{openRouteBusy=false;}
+        try {const response=await mapsFetch(`${base}/route/v1/driving/${points.map(p=>`${p.lng},${p.lat}`).join(';')}?steps=true&overview=full&geometries=geojson`,{signal:AbortSignal.timeout(20000),headers:{'User-Agent':'HambaRoutes-IsolatedTest/1.0 (https://github.com/Naha1981/hamba-routes)'}});if(!response.ok)throw new Error(`Routing service HTTP ${response.status}`);data=await response.json();if(data.code!=='Ok'||!data.routes?.[0])throw new Error('No drivable road route found.');openRouteCache.set(key,data);}finally{openRouteBusy=false;}
       }
       const encode=(coords:number[][])=>{let lat=0,lng=0,out='';const emit=(v:number)=>{let n=v<0?~(v<<1):(v<<1);while(n>=32){out+=String.fromCharCode((32|(n&31))+63);n>>=5;}out+=String.fromCharCode(n+63);};for(const c of coords){const a=Math.round(c[1]*1e5),b=Math.round(c[0]*1e5);emit(a-lat);emit(b-lng);lat=a;lng=b;}return out;};
       const route=data.routes[0];return res.json({provider:'osrm',trafficAware:false,routes:[{distanceMeters:route.distance,duration:`${Math.round(route.duration)}s`,legs:route.legs.map((l:any)=>({distanceMeters:l.distance,duration:`${Math.round(l.duration)}s`,polyline:{encodedPolyline:encode(l.steps.flatMap((s:any)=>s.geometry.coordinates))}}))}],waypointCapExceeded:false,maxIntermediates:25});
@@ -195,7 +197,7 @@ app.post('/api/routes/compute', async (req, res) => {
       ? 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.legs.distanceMeters,routes.legs.polyline.encodedPolyline'
       : 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs.duration,routes.legs.distanceMeters,routes.legs.polyline.encodedPolyline';
 
-    const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    const response = await mapsFetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -288,13 +290,15 @@ app.post('/api/routes/matrix', async (req, res) => {
     return res.status(400).json({ error: 'At least one valid route node is required.' });
   }
 
+  if(OPEN_MAPS){try{const {roadMatrix}=await import('./roadPlanner');const ss=[{id:'candidate',location:{lat:cLat,lng:cLng}},...sanitizedNodes.map(n=>({id:n.id,location:{lat:n.lat,lng:n.lng}}))];if(ss.length>21)return res.status(400).json({error:'Use no more than20route nodes in this test.'});const m=await roadMatrix(ss);return res.json({source:'osrm_road_matrix',cacheHit:false,distancesByNodeId:Object.fromEntries(sanitizedNodes.map((n,i)=>[n.id,{nodeId:n.id,distanceMeters:m.distances[0][i+1],durationSeconds:m.durations[0][i+1]}]))});}catch(e:any){return res.status(422).json({error:e.message,source:'unavailable',keptExistingOrder:true});}}
+
   const nodeSig = sanitizedNodes
     .map((n) => `${n.id}:${n.lat.toFixed(4)},${n.lng.toFixed(4)}`)
     .sort()
     .join('|');
   const cacheKey = `${cLat.toFixed(5)},${cLng.toFixed(5)}::${nodeSig}`;
 
-  const cached = serverMatrixCache.get(cacheKey);
+  const cached = OPEN_MAPS ? serverMatrixCache.get(cacheKey) : undefined;
   if (cached && Date.now() - cached.fetchedAt < 30 * 60 * 1000) {
     return res.json({
       cacheKey,
@@ -312,7 +316,7 @@ app.post('/api/routes/matrix', async (req, res) => {
       fetchedAt: Date.now(),
       distancesByNodeId: fallbackMap
     };
-    serverMatrixCache.set(cacheKey, entry);
+    if(OPEN_MAPS) serverMatrixCache.set(cacheKey, entry);
     return res.json({
       cacheKey,
       cacheHit: false,
@@ -360,7 +364,7 @@ app.post('/api/routes/matrix', async (req, res) => {
       departureTime: new Date(targetUtcMs).toISOString()
     };
 
-    const response = await fetch('https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix', {
+    const response = await mapsFetch('https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -380,7 +384,7 @@ app.post('/api/routes/matrix', async (req, res) => {
         fetchedAt: Date.now(),
         distancesByNodeId: fallbackMap
       };
-      serverMatrixCache.set(cacheKey, entry);
+      if(OPEN_MAPS) serverMatrixCache.set(cacheKey, entry);
       return res.json({
         cacheKey,
         cacheHit: false,
@@ -417,7 +421,7 @@ app.post('/api/routes/matrix', async (req, res) => {
       fetchedAt: Date.now(),
       distancesByNodeId
     };
-    serverMatrixCache.set(cacheKey, entry);
+    if(OPEN_MAPS) serverMatrixCache.set(cacheKey, entry);
 
     return res.json({
       cacheKey,
@@ -432,7 +436,7 @@ app.post('/api/routes/matrix', async (req, res) => {
       fetchedAt: Date.now(),
       distancesByNodeId: fallbackMap
     };
-    serverMatrixCache.set(cacheKey, entry);
+    if(OPEN_MAPS) serverMatrixCache.set(cacheKey, entry);
     return res.json({
       cacheKey,
       cacheHit: false,
@@ -449,7 +453,7 @@ app.post('/api/maps/resolve-pin', async (req, res) => {
   }
 
   try {
-    const response = await fetch(rawUrl, {
+    const response = await mapsFetch(rawUrl, {
       method: 'GET',
       redirect: 'follow',
       headers: { 'User-Agent': 'HambaRoutes/1.0' }
@@ -1073,8 +1077,9 @@ const handlePlanRoutes = (req: express.Request, res: express.Response) => {
   }
 };
 
-app.post('/api/routes/plan', handlePlanRoutes);
-app.post('/api/routes/optimize', handlePlanRoutes);
+const routeHandler:express.RequestHandler=async(req,res)=>{if(!OPEN_MAPS)return handlePlanRoutes(req,res);try{res.json(await planRoad(req.body));}catch(e:any){res.status(/coordinate|Use a depot|Pinned|Invalid time/.test(e.message)?400:422).json({error:e.message,roadMatrix:false,keptExistingOrder:true});}};
+app.post('/api/routes/plan', routeHandler);
+app.post('/api/routes/optimize', routeHandler);
 
 // 5. Hamba Routes Dispatch Briefing
 app.post('/api/ai/grooming-report', async (req, res) => {
@@ -1096,7 +1101,7 @@ app.post('/api/ai/grooming-report', async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true, host: '0.0.0.0' },
+      server: { middlewareMode: true, host: '0.0.0.0', hmr: false },
       appType: 'spa'
     });
     app.use(vite.middlewares);
