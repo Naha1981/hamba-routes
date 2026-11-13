@@ -1,3 +1,4 @@
+import { OPEN_MAPS } from '../providerConfig';
 import {
   PetStop,
   RouteLeg,
@@ -49,7 +50,13 @@ function buildJohannesburgDepartureIso(depMinutes: number = 420): string {
  * Fetches real Google Maps route polylines between ordered stops.
  * Automatically chunks loops exceeding 25 intermediates to respect Routes API limits.
  */
+let openRouteQueue: Promise<any> = Promise.resolve();
 export async function computeRealRouteLegs(orderedStops: PetStop[], depMinutes?: number): Promise<RouteLeg[] | null> {
+ if (!OPEN_MAPS) return computeRouteLegsInternal(orderedStops,depMinutes);
+ const job=openRouteQueue.then(async()=>{await new Promise(r=>setTimeout(r,1150));return computeRouteLegsInternal(orderedStops,depMinutes);});
+ openRouteQueue=job.catch(()=>null);return job;
+}
+async function computeRouteLegsInternal(orderedStops: PetStop[], depMinutes?: number): Promise<RouteLeg[] | null> {
   if (orderedStops.length < 2) return [];
 
   const departureTime = buildJohannesburgDepartureIso(depMinutes !== undefined ? depMinutes : 420);
@@ -179,10 +186,12 @@ export async function computeFleetRouteLegs(vehicleRoutes: any[], depMinutes?: n
     vehicleRoutes.map(async (vr, idx) => {
       if (!vr.orderedStops || vr.orderedStops.length < 2) return vr;
       let usedLegs = await computeRealRouteLegs(vr.orderedStops, depMinutes);
+      const roadVerified = Boolean(usedLegs?.length);
 
       if (!usedLegs || usedLegs.length === 0) {
         const calcRes = calculateRouteResult(vr.orderedStops);
-        usedLegs = calcRes.legs;
+        usedLegs = calcRes.legs.map(l => OPEN_MAPS ? {...l, pathCoordinates:[vr.orderedStops.find((s:any)=>s.id===l.fromStopId)?.location,vr.orderedStops.find((s:any)=>s.id===l.toStopId)?.location].filter(Boolean)} : l);
+        if (OPEN_MAPS) window.dispatchEvent(new CustomEvent('open-route-warning', {detail:'Road routing failed for at least one van. Dashed straight lines are estimates, not road directions.'}));
       }
 
       const preset = JHB_VEHICLES[idx];
@@ -236,6 +245,7 @@ export async function computeFleetRouteLegs(vehicleRoutes: any[], depMinutes?: n
           orderedStops: vr.orderedStops,
           stops: vr.orderedStops,
           legs: coloredLegs,
+          roadVerified,
           totalDistanceMeters: totalDist,
           totalDurationSeconds: totalDur,
           totalDurationMin: Math.round(totalDur / 60),
@@ -650,7 +660,7 @@ export async function computeTodayTrafficRoute(params: {
             weekday
           });
         }
-        source = 'routes_api_traffic';
+        source = OPEN_MAPS ? 'estimated_traffic' : 'routes_api_traffic';
 
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
