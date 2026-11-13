@@ -291,7 +291,7 @@ export interface MatrixPairResult {
 
 export interface CachedMatrixEntry {
   cacheKey: string;
-  source: 'google_routes_matrix' | 'estimated_fallback';
+  source: 'google_routes_matrix' | 'osrm_road_matrix' | 'estimated_fallback';
   fetchedAt: number;
   distancesByNodeId: Record<string, MatrixPairResult>;
 }
@@ -413,4 +413,3 @@ export interface CityPreset {
   };
   stops: PetStop[];
 }
-

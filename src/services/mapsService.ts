@@ -1,0 +1,5 @@
+// Single browser map request boundary. Provider is fixed at build time.
+import {OPEN_MAPS} from '../providerConfig';
+export const MAP_PROVIDER=OPEN_MAPS?'open':'google';
+export async function mapRequest(url:string,options?:RequestInit){if(OPEN_MAPS&&/^https?:\/\/[^/]*googleapis\.com/.test(url))throw new Error('Google data cannot be used with the open-map stack.');const r=await fetch(url,options);if(r.status===429)throw new Error('Map service is busy or its allowance is exhausted. Your existing stops are unchanged. Try again later.');return r;}
+export function coordinatesFromPin(value:string){const s=value.trim();const patterns=[/[?&](?:q|query|ll)=(-?\d+(?:\.\d+)?)[,%\s]+(?:2C)?(-?\d+(?:\.\d+)?)/i,/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/,/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/];let raw=s;try{raw=decodeURIComponent(s);}catch{}for(const re of patterns){const m=raw.match(re);if(m){const lat=Number(m[1]),lng=Number(m[2]);if(Math.abs(lat)<=90&&Math.abs(lng)<=180)return {lat,lng};}}return null;}
