@@ -1,3 +1,4 @@
+import { OPEN_MAPS } from '../providerConfig';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 
 export const SOLUTION_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
@@ -5,10 +6,11 @@ export const SOLUTION_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 let initialized = false;
 
 export function hasClientMapsKey(): boolean {
-  return Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+  return !OPEN_MAPS && Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
 }
 
 export function initGoogleMaps(): boolean {
+  if (OPEN_MAPS) return false;
   if (initialized) return true;
 
   const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';

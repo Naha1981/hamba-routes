@@ -7,7 +7,8 @@ dotenv.config();
 
 const app = express();
 app.set("trust proxy", 2);
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
+const OPEN_MAPS = process.env.MAP_PROVIDER === 'open';
 
 app.use(express.json());
 
@@ -47,6 +48,7 @@ const JHB_VEHICLE_PRESETS = [
 
 // API Key getter (Backend Secret for Google Maps Platform Routes API)
 const getBackendMapsApiKey = () => {
+  if (OPEN_MAPS) return '';
   return process.env.GOOGLE_MAPS_API_KEY_BACKEND || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '';
 };
 
@@ -63,6 +65,9 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+const openRouteCache = new Map<string, any>();
+let openRouteBusy=false,lastOpenRouteAt=0;
+
 // 4. Compute Routes API Proxy
 const ROUTES_API_MAX_INTERMEDIATES = 25;
 
@@ -76,6 +81,24 @@ app.post('/api/routes/compute', async (req, res) => {
 
   const submittedIntermediatesCount = Array.isArray(intermediates) ? intermediates.length : 0;
   const waypointCapExceeded = submittedIntermediatesCount > ROUTES_API_MAX_INTERMEDIATES;
+
+  if (OPEN_MAPS) {
+    const points=[origin,...(Array.isArray(intermediates)?intermediates:[]),destination];
+    if(points.length>27 || points.some(p=>!Number.isFinite(p?.lat)||!Number.isFinite(p?.lng)||Math.abs(p.lat)>90||Math.abs(p.lng)>180)) return res.status(400).json({error:'Invalid coordinates or too many stops.'});
+    try {
+      if(process.env.NODE_ENV==='production' && !process.env.OSRM_BASE_URL) return res.status(503).json({error:'Configure a self-hosted or explicitly authorised OSRM service for production. Public demo is for non-commercial tests only.'});
+      const base=process.env.OSRM_BASE_URL || 'https://router.project-osrm.org';
+      const key=JSON.stringify(points);
+      let data=openRouteCache.get(key);
+      if(!data){
+        if(openRouteBusy || Date.now()-lastOpenRouteAt<1100) return res.status(429).json({error:'Please wait before the next open routing request.'});
+        openRouteBusy=true;lastOpenRouteAt=Date.now();
+        try {const response=await fetch(`${base}/route/v1/driving/${points.map(p=>`${p.lng},${p.lat}`).join(';')}?steps=true&overview=full&geometries=geojson`,{signal:AbortSignal.timeout(20000),headers:{'User-Agent':'HambaRoutes-IsolatedTest/1.0 (https://github.com/Naha1981/hamba-routes)'}});if(!response.ok)throw new Error(`Routing service HTTP ${response.status}`);data=await response.json();if(data.code!=='Ok'||!data.routes?.[0])throw new Error('No drivable road route found.');openRouteCache.set(key,data);}finally{openRouteBusy=false;}
+      }
+      const encode=(coords:number[][])=>{let lat=0,lng=0,out='';const emit=(v:number)=>{let n=v<0?~(v<<1):(v<<1);while(n>=32){out+=String.fromCharCode((32|(n&31))+63);n>>=5;}out+=String.fromCharCode(n+63);};for(const c of coords){const a=Math.round(c[1]*1e5),b=Math.round(c[0]*1e5);emit(a-lat);emit(b-lng);lat=a;lng=b;}return out;};
+      const route=data.routes[0];return res.json({provider:'osrm',trafficAware:false,routes:[{distanceMeters:route.distance,duration:`${Math.round(route.duration)}s`,legs:route.legs.map((l:any)=>({distanceMeters:l.distance,duration:`${Math.round(l.duration)}s`,polyline:{encodedPolyline:encode(l.steps.flatMap((s:any)=>s.geometry.coordinates))}}))}],waypointCapExceeded:false,maxIntermediates:25});
+    }catch(e:any){return res.status(502).json({error:'Open road routing unavailable. Estimates only, not verified road routes.',detail:e.message});}
+  }
 
   if (!apiKey) {
     return res.json({

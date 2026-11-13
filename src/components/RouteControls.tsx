@@ -94,7 +94,7 @@ export const RouteControls: React.FC<RouteControlsProps> = ({
   };
 
   const innerControls = (
-    <div className={`p-2 rounded-2xl border backdrop-blur-md flex items-center gap-2 overflow-x-auto w-full flex-nowrap shrink-0 transition-colors ${
+    <div className={`p-2 rounded-2xl border backdrop-blur-md flex items-center gap-2 overflow-x-auto w-full flex-wrap lg:flex-nowrap shrink-0 transition-colors ${
       isDark
         ? 'bg-slate-900/90 border-slate-800 shadow-xl'
         : 'bg-white/95 border-slate-200 shadow-md'

@@ -1,3 +1,4 @@
+import { OPEN_MAPS } from '../providerConfig';
 import React, { useState, useEffect, useRef } from 'react';
 import { PetStop, UrgencyLevel, LatLng, ServiceCategory } from '../types';
 import { X, MapPin, Search, Compass, Eye, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
@@ -32,6 +33,7 @@ export const AddPetModal: React.FC<AddPetModalProps> = ({
   theme = 'dark'
 }) => {
   const [name, setName] = useState('');
+  const [openPinConfirmed,setOpenPinConfirmed] = useState(false);
   const [phone, setPhone] = useState('+27 82 555 0199');
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [suburb, setSuburb] = useState('Sandton');
@@ -70,6 +72,7 @@ export const AddPetModal: React.FC<AddPetModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setIsMinimized(false);
+      setOpenPinConfirmed(Boolean(editingStop));
       setPhoneError(null);
       setMiniMapError(null);
       setSuggestions([]);
@@ -256,7 +259,7 @@ export const AddPetModal: React.FC<AddPetModalProps> = ({
 
     async function initMiniMap() {
       if (!hasClientMapsKey()) {
-        if (isMounted) setMiniMapError('Google Maps API key not configured. Enter an address or coordinates.');
+        if (isMounted) setMiniMapError(OPEN_MAPS ? 'Open-map mode: confirm latitude and longitude below. No Google request is made.' : 'Google Maps API key not configured. Enter an address or coordinates.');
         return;
       }
       try {
@@ -368,8 +371,9 @@ export const AddPetModal: React.FC<AddPetModalProps> = ({
     }
     setPhoneError(null);
 
-    const finalLat = customLocation.lat || centerLocation.lat;
-    const finalLng = customLocation.lng || centerLocation.lng;
+    if (OPEN_MAPS && (!openPinConfirmed || !Number.isFinite(customLocation.lat) || !Number.isFinite(customLocation.lng) || Math.abs(customLocation.lat)>90 || Math.abs(customLocation.lng)>180 || !address.trim())) { setPhoneError('Enter an address label and valid confirmed coordinates.'); return; }
+    const finalLat = customLocation.lat ?? centerLocation.lat;
+    const finalLng = customLocation.lng ?? centerLocation.lng;
     const finalAddress = address.trim() || `${suburb}, Johannesburg (${finalLat.toFixed(4)}, ${finalLng.toFixed(4)})`;
     const meta = SERVICE_DEFAULTS[serviceCategory];
 
@@ -612,6 +616,7 @@ export const AddPetModal: React.FC<AddPetModalProps> = ({
             </div>
           </div>
 
+          {OPEN_MAPS && <div className="grid grid-cols-2 gap-2"><label>Latitude<input aria-label="Latitude" type="number" step="any" min="-90" max="90" required value={customLocation.lat} onChange={e=>setCustomLocation({...customLocation,lat:Number(e.target.value)})} className="w-full bg-slate-800 p-2 rounded"/></label><label>Longitude<input aria-label="Longitude" type="number" step="any" min="-180" max="180" required value={customLocation.lng} onChange={e=>setCustomLocation({...customLocation,lng:Number(e.target.value)})} className="w-full bg-slate-800 p-2 rounded"/></label><label className="col-span-2 text-xs"><input aria-label="I confirm these coordinates" type="checkbox" required checked={openPinConfirmed} onChange={e=>setOpenPinConfirmed(e.target.checked)}/> I confirm these coordinates identify this test stop.</label><p className="col-span-2 text-xs">Use confirmed coordinates. Public Nominatim is not enabled: no autocomplete or customer address disclosure to it.</p></div>}
           {/* 2. Customer Name & Service Category */}
           <div className="grid grid-cols-2 gap-2">
             <div>
