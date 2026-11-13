@@ -1,3 +1,4 @@
+import { OPEN_MAPS } from '../providerConfig';
 import React from 'react';
 import { HelpCircle, Check, Loader2 } from 'lucide-react';
 import { PetStop, VanTelemetry } from '../types';
@@ -30,7 +31,7 @@ export const OptimizationStepper: React.FC<OptimizationStepperProps> = ({
     },
     {
       id: 'routes',
-      title: '2. Google Routes API Directions'
+      title: OPEN_MAPS ? '2. OSRM road directions (no traffic)' : '2. Google Routes API Directions'
     }
   ];
 
@@ -42,7 +43,7 @@ export const OptimizationStepper: React.FC<OptimizationStepperProps> = ({
           : 'bg-white border-slate-200 text-slate-700 shadow-xs'
       }`}>
         <p className="leading-snug text-[11px]">
-          This route planner orders recurring pool, pest, and garden customer visits across Johannesburg using Google Maps Platform Routes API.
+          {OPEN_MAPS ? 'Local test: recurring service visits with OpenStreetMap and OSRM. No live traffic, no real revenue, no account created.' : 'This route planner orders recurring pool, pest, and garden customer visits across Johannesburg using Google Maps Platform Routes API.'}
         </p>
       </div>
     );
