@@ -1,0 +1,276 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all rule (Zero-Trust posture)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isAuthenticated() &&
+             request.auth.uid == userId &&
+             request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string &&
+             id.size() >= 1 &&
+             id.size() <= 128 &&
+             id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    function isValidNonEmptyString(val, maxLen) {
+      return val is string && val.size() >= 1 && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    function isValidUserWorkspace(data) {
+      return data.keys().hasAll([
+        'ownerUid',
+        'businessName',
+        'fuelPricePerLitre',
+        'fuelConsumptionLPer100Km',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerUid',
+        'businessName',
+        'fuelPricePerLitre',
+        'fuelConsumptionLPer100Km',
+        'maxShiftHours',
+        'fleetSize',
+        'workingDaysPerMonth',
+        'avgPricePerVisitZar',
+        'grossMarginPercent',
+        'baselineMode',
+        'pastedOrderText',
+        'breakEvenMonthlyFeeZar',
+        'departureMinutes',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerUid is string &&
+      data.ownerUid == request.auth.uid &&
+      isValidNonEmptyString(data.businessName, 100) &&
+      data.fuelPricePerLitre is number && data.fuelPricePerLitre > 0 && data.fuelPricePerLitre <= 250 &&
+      data.fuelConsumptionLPer100Km is number && data.fuelConsumptionLPer100Km > 0 && data.fuelConsumptionLPer100Km <= 100 &&
+      (!('maxShiftHours' in data) || (data.maxShiftHours is number && data.maxShiftHours >= 1 && data.maxShiftHours <= 24)) &&
+      (!('fleetSize' in data) || (data.fleetSize is number && data.fleetSize >= 1 && data.fleetSize <= 20)) &&
+      (!('workingDaysPerMonth' in data) || (data.workingDaysPerMonth is number && data.workingDaysPerMonth >= 1 && data.workingDaysPerMonth <= 31)) &&
+      (!('avgPricePerVisitZar' in data) || (data.avgPricePerVisitZar is number && data.avgPricePerVisitZar >= 0 && data.avgPricePerVisitZar <= 100000)) &&
+      (!('grossMarginPercent' in data) || (data.grossMarginPercent is number && data.grossMarginPercent >= 0 && data.grossMarginPercent <= 100)) &&
+      (!('baselineMode' in data) || data.baselineMode in ['suburb', 'alphabetical', 'pasted']) &&
+      (!('pastedOrderText' in data) || isValidOptionalString(data.pastedOrderText, 20000)) &&
+      (!('breakEvenMonthlyFeeZar' in data) || (data.breakEvenMonthlyFeeZar is number && data.breakEvenMonthlyFeeZar >= 0 && data.breakEvenMonthlyFeeZar <= 500000)) &&
+      (!('departureMinutes' in data) || (data.departureMinutes is number && data.departureMinutes >= 0 && data.departureMinutes < 1440)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidLatLng(loc) {
+      return loc is map &&
+             loc.keys().hasAll(['lat', 'lng']) &&
+             loc.keys().hasOnly(['lat', 'lng', 'altitude']) &&
+             loc.lat is number && loc.lat >= -90 && loc.lat <= 90 &&
+             loc.lng is number && loc.lng >= -180 && loc.lng <= 180 &&
+             (!('altitude' in loc) || loc.altitude is number);
+    }
+
+    function isValidTimeWindow(tw) {
+      return tw is map &&
+             tw.keys().hasAll(['start', 'end']) &&
+             tw.keys().hasOnly(['start', 'end']) &&
+             isValidNonEmptyString(tw.start, 10) &&
+             isValidNonEmptyString(tw.end, 10);
+    }
+
+    function isValidCustomerStop(data) {
+      return data.keys().hasAll([
+        'ownerUid',
+        'name',
+        'phone',
+        'address',
+        'location',
+        'serviceType',
+        'serviceCost',
+        'durationMin',
+        'timeWindow',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerUid',
+        'order',
+        'name',
+        'ownerName',
+        'breed',
+        'species',
+        'serviceCategory',
+        'suburb',
+        'phone',
+        'weeklyFrequency',
+        'avatar',
+        'address',
+        'location',
+        'serviceType',
+        'serviceCost',
+        'personality',
+        'urgency',
+        'mudLevel',
+        'fluffFactor',
+        'timeWindow',
+        'durationMin',
+        'specialInstructions',
+        'notes',
+        'funnyQuote',
+        'status',
+        'isPinned',
+        'assignedVanId',
+        'vanOrder',
+        'assignedWeekday',
+        'weekdayOrder',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerUid is string &&
+      data.ownerUid == request.auth.uid &&
+      isValidNonEmptyString(data.name, 120) &&
+      isValidNonEmptyString(data.phone, 32) &&
+      isValidNonEmptyString(data.address, 300) &&
+      isValidLatLng(data.location) &&
+      isValidNonEmptyString(data.serviceType, 160) &&
+      data.serviceCost is number && data.serviceCost >= 0 && data.serviceCost <= 100000 &&
+      data.durationMin is number && data.durationMin >= 1 && data.durationMin <= 480 &&
+      isValidTimeWindow(data.timeWindow) &&
+      data.status in ['pending', 'in-grooming', 'completed'] &&
+      (!('order' in data) || (data.order is number && data.order >= 0 && data.order <= 10000)) &&
+      (!('ownerName' in data) || isValidOptionalString(data.ownerName, 120)) &&
+      (!('breed' in data) || isValidOptionalString(data.breed, 120)) &&
+      (!('species' in data) || data.species in ['dog', 'cat', 'bunny', 'alpaca', 'capybara']) &&
+      (!('serviceCategory' in data) || data.serviceCategory in ['pool', 'pest', 'garden']) &&
+      (!('suburb' in data) || isValidOptionalString(data.suburb, 80)) &&
+      (!('weeklyFrequency' in data) || isValidOptionalString(data.weeklyFrequency, 80)) &&
+      (!('avatar' in data) || isValidOptionalString(data.avatar, 16)) &&
+      (!('personality' in data) || isValidOptionalString(data.personality, 300)) &&
+      (!('urgency' in data) || data.urgency in ['critical', 'high', 'standard']) &&
+      (!('mudLevel' in data) || data.mudLevel is number) &&
+      (!('fluffFactor' in data) || data.fluffFactor is number) &&
+      (!('specialInstructions' in data) || isValidOptionalString(data.specialInstructions, 300)) &&
+      (!('notes' in data) || isValidOptionalString(data.notes, 500)) &&
+      (!('funnyQuote' in data) || isValidOptionalString(data.funnyQuote, 300)) &&
+      (!('isPinned' in data) || data.isPinned is bool) &&
+      (!('assignedVanId' in data) || isValidOptionalString(data.assignedVanId, 32)) &&
+      (!('vanOrder' in data) || data.vanOrder is number) &&
+      (!('assignedWeekday' in data) || data.assignedWeekday in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']) &&
+      (!('weekdayOrder' in data) || data.weekdayOrder is number) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isVerifiedOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isVerifiedOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserWorkspace(request.resource.data) &&
+                       request.resource.data.createdAt == request.time &&
+                       request.resource.data.updatedAt == request.time;
+
+      allow update: if isVerifiedOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserWorkspace(request.resource.data) &&
+                       request.resource.data.ownerUid == resource.data.ownerUid &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       request.resource.data.updatedAt == request.time &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                         'businessName',
+                         'fuelPricePerLitre',
+                         'fuelConsumptionLPer100Km',
+                         'maxShiftHours',
+                         'fleetSize',
+                         'workingDaysPerMonth',
+                         'avgPricePerVisitZar',
+                         'grossMarginPercent',
+                         'baselineMode',
+                         'pastedOrderText',
+                         'breakEvenMonthlyFeeZar',
+                         'departureMinutes',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isVerifiedOwner(userId) && isValidId(userId);
+
+      match /customers/{customerId} {
+        allow get, list: if isVerifiedOwner(userId) && isValidId(userId);
+
+        allow create: if isVerifiedOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(customerId) &&
+                         isValidCustomerStop(request.resource.data) &&
+                         request.resource.data.createdAt == request.time &&
+                         request.resource.data.updatedAt == request.time;
+
+        allow update: if isVerifiedOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(customerId) &&
+                         isValidCustomerStop(request.resource.data) &&
+                         request.resource.data.ownerUid == resource.data.ownerUid &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'order',
+                           'name',
+                           'ownerName',
+                           'breed',
+                           'species',
+                           'serviceCategory',
+                           'suburb',
+                           'phone',
+                           'weeklyFrequency',
+                           'avatar',
+                           'address',
+                           'location',
+                           'serviceType',
+                           'serviceCost',
+                           'personality',
+                           'urgency',
+                           'mudLevel',
+                           'fluffFactor',
+                           'timeWindow',
+                           'durationMin',
+                           'specialInstructions',
+                           'notes',
+                           'funnyQuote',
+                           'status',
+                           'isPinned',
+                           'assignedVanId',
+                           'vanOrder',
+                           'assignedWeekday',
+                           'weekdayOrder',
+                           'updatedAt'
+                         ]);
+
+        allow delete: if isVerifiedOwner(userId) && isValidId(userId);
+      }
+    }
+  }
+}

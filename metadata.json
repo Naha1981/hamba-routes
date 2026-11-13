@@ -1,0 +1,8 @@
+{
+  "name": "HambaRoutes",
+  "description": "Fewer Kilometers, more jobs",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

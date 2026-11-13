@@ -1,0 +1,237 @@
+{
+  "entities": {
+    "UserWorkspace": {
+      "title": "UserWorkspace",
+      "description": "Business settings, fuel cost assumptions, and planner preferences isolated per signed-in Google account.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the business owner."
+        },
+        "businessName": {
+          "type": "string",
+          "description": "Business name displayed in WhatsApp customer reminders and manifests."
+        },
+        "fuelPricePerLitre": {
+          "type": "number",
+          "description": "Fuel price in ZAR per litre."
+        },
+        "fuelConsumptionLPer100Km": {
+          "type": "number",
+          "description": "Fleet fuel consumption in litres per 100 km."
+        },
+        "maxShiftHours": {
+          "type": "number",
+          "description": "Daily working shift length in hours (default 9h for 07:00-16:00)."
+        },
+        "fleetSize": {
+          "type": "number",
+          "description": "Active number of service vehicles."
+        },
+        "workingDaysPerMonth": {
+          "type": "number",
+          "description": "Working days per month used for monthly Rand savings scaling."
+        },
+        "avgPricePerVisitZar": {
+          "type": "number",
+          "description": "Average revenue per visit in ZAR."
+        },
+        "grossMarginPercent": {
+          "type": "number",
+          "description": "Gross profit margin percentage."
+        },
+        "baselineMode": {
+          "type": "string",
+          "description": "Baseline route comparison mode: suburb, alphabetical, or pasted."
+        },
+        "pastedOrderText": {
+          "type": "string",
+          "description": "Optional pasted baseline customer order lines."
+        },
+        "breakEvenMonthlyFeeZar": {
+          "type": "number",
+          "description": "Monthly fee assumption for break-even km/day calculation."
+        },
+        "departureMinutes": {
+          "type": "number",
+          "description": "Shift departure time in minutes past midnight (SAST)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when workspace was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when workspace was last updated."
+        }
+      },
+      "required": [
+        "ownerUid",
+        "businessName",
+        "fuelPricePerLitre",
+        "fuelConsumptionLPer100Km",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CustomerStop": {
+      "title": "CustomerStop",
+      "description": "Recurring Johannesburg customer visit for pool cleaning, pest control, or garden services.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owning business."
+        },
+        "order": {
+          "type": "number",
+          "description": "Stop display order."
+        },
+        "name": {
+          "type": "string",
+          "description": "Customer full name or site title."
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Residence or contact label."
+        },
+        "breed": {
+          "type": "string",
+          "description": "Service & suburb summary."
+        },
+        "species": {
+          "type": "string",
+          "description": "Legacy icon key compatibility."
+        },
+        "serviceCategory": {
+          "type": "string",
+          "description": "pool, pest, or garden."
+        },
+        "suburb": {
+          "type": "string",
+          "description": "Johannesburg suburb."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Validated South African phone number (+27 format)."
+        },
+        "weeklyFrequency": {
+          "type": "string",
+          "description": "Recurring schedule frequency label."
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Service category emoji icon."
+        },
+        "address": {
+          "type": "string",
+          "description": "Street address in Johannesburg."
+        },
+        "location": {
+          "type": "object",
+          "description": "Latitude and longitude coordinates."
+        },
+        "serviceType": {
+          "type": "string",
+          "description": "Specific service task."
+        },
+        "serviceCost": {
+          "type": "number",
+          "description": "Visit price in ZAR."
+        },
+        "personality": {
+          "type": "string",
+          "description": "Property & gate access notes."
+        },
+        "urgency": {
+          "type": "string",
+          "description": "standard, high, or critical."
+        },
+        "mudLevel": {
+          "type": "number"
+        },
+        "fluffFactor": {
+          "type": "number"
+        },
+        "timeWindow": {
+          "type": "object",
+          "description": "24-hour SAST visit window start and end."
+        },
+        "durationMin": {
+          "type": "number",
+          "description": "Visit duration in minutes."
+        },
+        "specialInstructions": {
+          "type": "string",
+          "description": "Recurring frequency and notes."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional customer access instructions, gate codes, or pet-friendly warnings."
+        },
+        "funnyQuote": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "description": "pending, in-grooming, or completed."
+        },
+        "isPinned": {
+          "type": "boolean"
+        },
+        "assignedVanId": {
+          "type": "string"
+        },
+        "vanOrder": {
+          "type": "number"
+        },
+        "assignedWeekday": {
+          "type": "string"
+        },
+        "weekdayOrder": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerUid",
+        "name",
+        "phone",
+        "address",
+        "location",
+        "serviceType",
+        "serviceCost",
+        "durationMin",
+        "timeWindow",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserWorkspace"
+      },
+      "description": "Per-business workspace profile & settings document isolated to userId."
+    },
+    "/users/{userId}/customers/{customerId}": {
+      "schema": {
+        "$ref": "#/entities/CustomerStop"
+      },
+      "description": "Private recurring customer visits belonging exclusively to userId."
+    }
+  }
+}
