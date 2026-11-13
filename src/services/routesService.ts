@@ -1,3 +1,4 @@
+import {mapRequest} from './mapsService';
 import { OPEN_MAPS } from '../providerConfig';
 import {
   PetStop,
@@ -83,7 +84,7 @@ async function computeRouteLegsInternal(orderedStops: PetStop[], depMinutes?: nu
         departureTime
       };
 
-      const response = await fetch('/api/routes/compute', {
+      const response = await mapRequest('/api/routes/compute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -285,7 +286,7 @@ export async function computeFleetRouteLegs(vehicleRoutes: any[], depMinutes?: n
  */
 export async function generateGroomingReport(stops: PetStop[], totalDistance: string, totalDuration: string) {
   try {
-    const response = await fetch('/api/ai/grooming-report', {
+    const response = await mapRequest('/api/ai/grooming-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stops, totalDistance, totalDuration })
@@ -310,7 +311,7 @@ export async function generateGroomingReport(stops: PetStop[], totalDistance: st
 - Brushcutters, blowers & green-waste bags ready`;
 }
 
-const CLIENT_MATRIX_CACHE_PREFIX = 'hamba_matrix_cache_v1_';
+const CLIENT_MATRIX_CACHE_PREFIX = 'hamba_open_matrix_cache_v2_';
 const clientMatrixMemoryCache = new Map<string, import('../types').CachedMatrixEntry>();
 
 function buildLocalFallbackMatrix(
@@ -352,14 +353,14 @@ export async function fetchPlacementMatrix(
     .map((n) => `${n.id}:${n.location.lat.toFixed(4)},${n.location.lng.toFixed(4)}`)
     .sort()
     .join('|');
-  const cacheKey = `${candidateLocation.lat.toFixed(5)},${candidateLocation.lng.toFixed(5)}::${uniqueNodes.length}::${nodeSig.length}`;
+  const cacheKey = `${candidateLocation.lat.toFixed(5)},${candidateLocation.lng.toFixed(5)}::${uniqueNodes.length}::${nodeSig}`;
 
-  const memCached = clientMatrixMemoryCache.get(cacheKey);
+  const memCached = OPEN_MAPS ? clientMatrixMemoryCache.get(cacheKey) : undefined;
   if (memCached && Date.now() - memCached.fetchedAt < 30 * 60 * 1000) {
     return { entry: memCached, cacheHit: true };
   }
 
-  if (typeof window !== 'undefined') {
+  if (OPEN_MAPS && typeof window !== 'undefined') {
     try {
       const rawSession = sessionStorage.getItem(`${CLIENT_MATRIX_CACHE_PREFIX}${cacheKey}`);
       if (rawSession) {
@@ -377,7 +378,7 @@ export async function fetchPlacementMatrix(
   let fetchError: string | undefined;
 
   try {
-    const response = await fetch('/api/routes/matrix', {
+    const response = await mapRequest('/api/routes/matrix', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -403,16 +404,16 @@ export async function fetchPlacementMatrix(
       }
       const entry: import('../types').CachedMatrixEntry = {
         cacheKey,
-        source: data?.source === 'google_routes_matrix' ? 'google_routes_matrix' : 'estimated_fallback',
+        source: data?.source === 'google_routes_matrix' ? 'google_routes_matrix' : data?.source === 'osrm_road_matrix' ? 'osrm_road_matrix' : 'estimated_fallback',
         fetchedAt: Date.now(),
         distancesByNodeId: data?.distancesByNodeId || buildLocalFallbackMatrix(candidateLocation, uniqueNodes)
       };
 
-      if (!fetchError) {
+      if (OPEN_MAPS && !fetchError) {
         clientMatrixMemoryCache.set(cacheKey, entry);
       }
       if (typeof window !== 'undefined') {
-        if (!fetchError) {
+        if (OPEN_MAPS && !fetchError) {
           try {
             sessionStorage.setItem(`${CLIENT_MATRIX_CACHE_PREFIX}${cacheKey}`, JSON.stringify(entry));
           } catch {
@@ -463,7 +464,7 @@ export async function fetchPlacementMatrix(
  */
 export async function resolveShortPinUrl(url: string): Promise<{ location?: import('../types').LatLng; error?: string }> {
   try {
-    const response = await fetch('/api/maps/resolve-pin', {
+    const response = await mapRequest('/api/maps/resolve-pin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
@@ -592,7 +593,7 @@ export async function computeTodayTrafficRoute(params: {
       optimizeWaypointOrder: cappedPending.length > 1
     };
 
-    const response = await fetch('/api/routes/compute', {
+    const response = await mapRequest('/api/routes/compute', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
