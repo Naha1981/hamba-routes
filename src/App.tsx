@@ -1,3 +1,5 @@
+import { LOCAL_TEST, OPEN_MAPS } from './providerConfig';
+import { OpenMapCanvas } from './components/OpenMapCanvas';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   PetStop,
@@ -23,7 +25,8 @@ import { computeRealRouteLegs, computeFleetRouteLegs, computeTodayTrafficRoute }
 import { assignWeekdayZones, buildWeekSchedulePlan, moveStopToWeekday } from './utils/weekdayZones';
 import { calculateWeekSavings } from './utils/savingsCalculator';
 import { formatDistance, formatDuration, densifyPolyline, generateCurvedStreetPoints } from './utils/geoUtils';
-import { GmpMapCanvas } from './components/GmpMapCanvas';
+import { GmpMapCanvas as GoogleMapCanvas } from './components/GmpMapCanvas';
+const GmpMapCanvas = OPEN_MAPS ? OpenMapCanvas : GoogleMapCanvas;
 import { RouteControls } from './components/RouteControls';
 import { StopListSidebar } from './components/StopListSidebar';
 import { VanDashboard } from './components/VanDashboard';
@@ -249,10 +252,10 @@ export function App() {
   const [selectedCityId, setSelectedCityId] = useState<string>('johannesburg');
   const currentCity = CITY_PRESETS.find(c => c.id === selectedCityId) || CITY_PRESETS[0];
 
-  const [clientStopCount, setClientStopCount] = useState<number>(DEFAULT_CLIENT_STOPS);
+  const [clientStopCount, setClientStopCount] = useState<number>(LOCAL_TEST ? Math.max(0,JSON.parse(localStorage.getItem('hamba_local_stops') || '[]').length-1) : DEFAULT_CLIENT_STOPS);
   const [fleetAllocationMode, setFleetAllocationMode] = useState<'auto' | 'manual'>('manual');
   const [maxShiftHours, setMaxShiftHours] = useState<number>(9);
-  const initialAutoFleet = DEFAULT_FLEET_SIZE;
+  const initialAutoFleet = LOCAL_TEST ? Number(localStorage.getItem('hamba_local_fleet') || 1) : DEFAULT_FLEET_SIZE;
   const [fleetSize, setFleetSize] = useState<number>(initialAutoFleet);
   const [fitBoundsKey, setFitBoundsKey] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'today' | 'savings'>('day');
@@ -299,19 +302,19 @@ export function App() {
     breakEvenMonthlyFeeZar: 1500
   }));
   const [manualStops, setManualStops] = useState<PetStop[]>(() => {
-    const base = buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
+    const base = LOCAL_TEST ? JSON.parse(localStorage.getItem('hamba_local_stops') || 'null') || [buildDepotOnly(currentCity)] : buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
     return assignWeekdayZones(base, initialAutoFleet, 420, 540, false).updatedStops;
   });
   const [stops, setStops] = useState<PetStop[]>(() => {
-    const base = buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
+    const base = LOCAL_TEST ? JSON.parse(localStorage.getItem('hamba_local_stops') || 'null') || [buildDepotOnly(currentCity)] : buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
     return assignWeekdayZones(base, initialAutoFleet, 420, 540, false).updatedStops;
   });
   const [originalStops, setOriginalStops] = useState<PetStop[]>(() => {
-    const base = buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
+    const base = LOCAL_TEST ? JSON.parse(localStorage.getItem('hamba_local_stops') || 'null') || [buildDepotOnly(currentCity)] : buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
     return assignWeekdayZones(base, initialAutoFleet, 420, 540, false).updatedStops;
   });
   const [selectedStop, setSelectedStop] = useState<PetStop | null>(() => {
-    const initialStops = buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
+    const initialStops = LOCAL_TEST ? JSON.parse(localStorage.getItem('hamba_local_stops') || 'null') || [buildDepotOnly(currentCity)] : buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
     return initialStops[1] || null; // Focus on the first client stop
   });
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
@@ -333,7 +336,7 @@ export function App() {
     }
     return 'dark';
   });
-  const [isIntroDismissed, setIsIntroDismissed] = useState<boolean>(false);
+  const [isIntroDismissed, setIsIntroDismissed] = useState<boolean>(LOCAL_TEST);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState<boolean>(true);
   const [routeWarning, setRouteWarning] = useState<{
     title: string;
@@ -529,7 +532,7 @@ export function App() {
 
   // Route calculation results
   const [routeResult, setRouteResult] = useState<OptimizedRouteResult>(() => {
-    const initialStops = buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
+    const initialStops = LOCAL_TEST ? JSON.parse(localStorage.getItem('hamba_local_stops') || 'null') || [buildDepotOnly(currentCity)] : buildStopsWithDepot(currentCity, initialAutoFleet, DEFAULT_CLIENT_STOPS);
     const taggedStops = updateVanAssignments(initialStops, initialAutoFleet);
     const baselineVehicles = buildBaselineFleetRoutes(taggedStops, initialAutoFleet);
     return {
@@ -666,10 +669,11 @@ export function App() {
   };
 
   useEffect(() => {
-    testFirestoreConnection().catch(() => {});
+    if (!LOCAL_TEST) testFirestoreConnection().catch(() => {});
   }, []);
 
   useEffect(() => {
+    if (LOCAL_TEST) { setAuthLoading(false); return; }
     let unsubWorkspace: (() => void) | null = null;
     let unsubCustomers: (() => void) | null = null;
 
@@ -858,7 +862,10 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => { if (LOCAL_TEST) { localStorage.setItem('hamba_local_stops', JSON.stringify(stops)); localStorage.setItem('hamba_local_fleet', String(fleetSize)); } }, [stops, fleetSize]);
+
   const handleSignInWithGoogle = async () => {
+    if (LOCAL_TEST) { setAuthError('Local test workspace only. Real Google signup and cloud saving are not tested.'); return; }
     setAuthError(null);
     setIsSigningIn(true);
     try {
@@ -955,7 +962,7 @@ export function App() {
     setFleetAllocationMode(mode);
     setActiveVanFilter('all');
 
-    const baseForFleet = user ? stops : buildStopsWithDepot(currentCity, clamped, clientStopCount);
+    const baseForFleet = (user || LOCAL_TEST) ? stops : buildStopsWithDepot(currentCity, clamped, clientStopCount);
     const taggedStops = assignWeekdayZones(updateVanAssignments(baseForFleet, clamped), clamped, departureMinutes, maxShiftHours * 60, false).updatedStops;
     setManualStops(taggedStops);
     setStops(taggedStops);
@@ -969,7 +976,7 @@ export function App() {
     setRouteResult({
       orderedStops: taggedStops,
       legs: [],
-      vehicleRoutes: user ? buildBaselineFleetRoutes(taggedStops, clamped) : [],
+      vehicleRoutes: (user || LOCAL_TEST) ? buildBaselineFleetRoutes(taggedStops, clamped) : [],
       totalDistanceMeters: 0,
       totalDurationSeconds: 0,
       totalDurationMin: 0,
@@ -1617,7 +1624,7 @@ export function App() {
     }
 
     // Celebrate optimization victory!
-    confetti({
+    if (!OPEN_MAPS) confetti({
       particleCount: 50,
       spread: 60,
       origin: { y: 0.6 }
@@ -3031,7 +3038,7 @@ export function App() {
                 progressPercent: 100
               }))
             }));
-            confetti({ particleCount: 100, spread: 90 });
+            if (!OPEN_MAPS) confetti({ particleCount: 100, spread: 90 });
           }
         }, 40);
 
@@ -3068,7 +3075,7 @@ export function App() {
           setSimStatus('idle');
           setSimulatedMinutes(shiftEndMinutes);
           setTelemetry(prev => ({ ...prev, isDriving: false, speedKmh: 0 }));
-          confetti({ particleCount: 100, spread: 90 });
+          if (!OPEN_MAPS) confetti({ particleCount: 100, spread: 90 });
           return;
         }
 
@@ -3187,6 +3194,7 @@ export function App() {
 
   return (
     <div className={`flex flex-col h-screen w-screen print:h-auto print:w-auto print:overflow-visible ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-200 text-slate-900'} overflow-hidden select-none font-sans transition-colors`}>
+      {LOCAL_TEST && <div className="shrink-0 bg-emerald-950 text-emerald-100 p-2 text-xs flex flex-wrap items-center gap-3"><strong>HAMBA ROUTES | ISOLATED LOCAL TEST</strong><span>No account created. Saved on this browser only. Fictional bookings, not actual revenue.</span><span>Leaflet / OpenStreetMap + OSRM. No live traffic.</span><button className="underline" onClick={() => handleFleetSizeChange(Math.min(8,fleetSize+1))}>Add van ({fleetSize})</button></div>}
       {quotaExceeded && (
         <div className="no-print bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm shrink-0">
           <span>
@@ -3354,7 +3362,7 @@ export function App() {
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
               <div className="min-w-0">
                 <div className="text-xs font-bold font-display">
-                  {authError ? 'Google Sign-In Error' : 'Cloud Sync Issue'}
+                  {authError ? (LOCAL_TEST ? 'Local signup gate (not exercised)' : 'Google Sign-In Error') : 'Cloud Sync Issue'}
                 </div>
                 <p className="text-[11.5px] mt-0.5 opacity-90 leading-snug">
                   {authError || syncError}
